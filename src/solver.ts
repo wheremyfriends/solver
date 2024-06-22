@@ -79,7 +79,7 @@ export class Solver {
 
     const allClasses = Solver.assignPriority(
       allUsersClasses[index],
-      coursePriority
+      coursePriority,
     );
 
     this.numsols = 0;
@@ -207,7 +207,7 @@ export class Solver {
     numClassPerLesson = Object.fromEntries(
       Object.entries(numClassPerLesson).filter(([_, value]) => {
         return value > 1;
-      })
+      }),
     );
 
     return {
