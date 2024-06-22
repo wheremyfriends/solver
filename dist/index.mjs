@@ -4,21 +4,15 @@ var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
 var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __propIsEnum = Object.prototype.propertyIsEnumerable;
-var __defNormalProp = (obj, key, value) =>
-  key in obj
-    ? __defProp(obj, key, {
-        enumerable: true,
-        configurable: true,
-        writable: true,
-        value,
-      })
-    : (obj[key] = value);
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __spreadValues = (a, b) => {
   for (var prop in b || (b = {}))
-    if (__hasOwnProp.call(b, prop)) __defNormalProp(a, prop, b[prop]);
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
   if (__getOwnPropSymbols)
     for (var prop of __getOwnPropSymbols(b)) {
-      if (__propIsEnum.call(b, prop)) __defNormalProp(a, prop, b[prop]);
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
     }
   return a;
 };
@@ -33,7 +27,7 @@ function convertDaytoNumber(inp) {
     Wednesday: 3,
     Thursday: 4,
     Friday: 5,
-    Saturday: 6,
+    Saturday: 6
   };
   return days[inp];
 }
@@ -46,7 +40,7 @@ function convertNumbertoDay(inp) {
     "Thursday",
     "Friday",
     "Saturday",
-    "Sunday",
+    "Sunday"
   ];
   return days[inp];
 }
@@ -62,7 +56,7 @@ function preprocess(timeslots) {
     return __spreadProps(__spreadValues({}, ts), {
       startTime: parseInt(ts["startTime"]) / 100,
       endTime: parseInt(ts["endTime"]) / 100,
-      day: convertDaytoNumber(ts["day"]),
+      day: convertDaytoNumber(ts["day"])
     });
   });
 }
@@ -71,7 +65,7 @@ function postprocess(timeslots) {
     return __spreadProps(__spreadValues({}, ts), {
       startTime: (ts["startTime"] * 100).toString().padStart(4, "0"),
       endTime: (ts["endTime"] * 100).toString().padStart(4, "0"),
-      day: convertNumbertoDay(ts["day"]),
+      day: convertNumbertoDay(ts["day"])
     });
   });
 }
@@ -90,7 +84,7 @@ var Solver = class _Solver {
     const coursePriority = _Solver.calculatePriority(allUsersClasses);
     const allClasses = _Solver.assignPriority(
       allUsersClasses[index],
-      coursePriority,
+      coursePriority
     );
     this.numsols = 0;
     this.maxsols = -1;
@@ -102,12 +96,7 @@ var Solver = class _Solver {
     this.numClassPerLesson = numClassPerLesson;
     this.allClasses = classes;
     this.allClasses.sort((a, b) => {
-      return (
-        b.priority - a.priority ||
-        b.moduleCode.localeCompare(a.moduleCode) ||
-        b.lessonType.localeCompare(a.lessonType) ||
-        b.classNo.localeCompare(a.classNo)
-      );
+      return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
     });
     log(Object(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
@@ -149,7 +138,7 @@ var Solver = class _Solver {
           lessonType: l.lessonType,
           classNo: l.classNo,
           priority: 0,
-          timeslots: [l],
+          timeslots: [l]
         };
       }
     });
@@ -184,11 +173,11 @@ var Solver = class _Solver {
     numClassPerLesson = Object.fromEntries(
       Object.entries(numClassPerLesson).filter(([_, value]) => {
         return value > 1;
-      }),
+      })
     );
     return {
       numClassPerLesson,
-      classes,
+      classes
     };
   }
   resetTimetable(cls) {
@@ -271,5 +260,7 @@ function getOptimisedTimetable(timetables, index, maxsols = -1) {
   });
   return ret;
 }
-export { getOptimisedTimetable };
+export {
+  getOptimisedTimetable
+};
 //# sourceMappingURL=index.mjs.map
