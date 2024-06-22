@@ -1,0 +1,28 @@
+# .github/workflows/ci.yml
+
+name: Build dist using earthly
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_COLOR: 1
+    steps:
+      - uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.0
+          use-cache: true
+      - uses: actions/checkout@v4
+      - name: Run build
+        run: earthly +build
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Build dist
+          branch: ${{ github.head_ref }}
