@@ -97,32 +97,18 @@ function postprocess(timeslots) {
 var import_roarr = require("roarr");
 var HOURS_IN_DAY = 24;
 var DAYS_IN_WEEK = 7;
-var NO_SOL_ERR_MSG = "No Solution";
 var Solver = class _Solver {
-  constructor(input, index) {
-    const allUsersClasses = [];
-    input.forEach((lessons) => {
-      allUsersClasses.push(_Solver.groupIntoClases(lessons));
-    });
-    const coursePriority = _Solver.calculatePriority(allUsersClasses);
-    const allClasses = _Solver.assignPriority(
-      allUsersClasses[index],
-      coursePriority
-    );
+  constructor({ maxSols }) {
     this.numsols = 0;
-    this.maxsols = -1;
+    this.maxsols = maxSols;
     this.curClasses = [];
     this.result = [];
     this.isLessonAllocated = /* @__PURE__ */ new Map();
     this.isFree = init2DArr(DAYS_IN_WEEK, HOURS_IN_DAY, 0 /* FREE */);
-    const { classes, numClassPerLesson } = this.preallocateMods(allClasses);
-    this.numClassPerLesson = numClassPerLesson;
-    this.allClasses = classes;
-    this.allClasses.sort((a, b) => {
-      return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
-    });
-    (0, import_roarr.Roarr)(Object(this.allClasses), "this.allClasses");
-    (0, import_roarr.Roarr)(this.numClassPerLesson, "this.numClassPerLesson");
+    this.bestSol = [];
+    this.maxcounter = 0;
+    this.allClasses = [];
+    this.numClassPerLesson = {};
   }
   static getLessonKey(cls) {
     return `${cls.moduleCode} ${cls.lessonType}`.toLowerCase();
@@ -149,7 +135,7 @@ var Solver = class _Solver {
     });
     return classes;
   }
-  static groupIntoClases(lessons) {
+  static groupIntoClasses(lessons) {
     const classToTimeSlot = {};
     lessons.forEach((l) => {
       const key = _Solver.getClassKey(l);
@@ -179,15 +165,22 @@ var Solver = class _Solver {
   }
   preallocateMods(classes) {
     let numClassPerLesson = _Solver.getNumClassPerLesson(classes);
+    let haserror = false;
     classes.forEach((cls) => {
       const lessonKey = _Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
       if (numclasses > 1) return;
-      if (!_Solver.checkAvail(this.isFree, cls.timeslots))
-        throw new Error(NO_SOL_ERR_MSG);
+      if (!_Solver.checkAvail(this.isFree, cls.timeslots)) {
+        haserror = true;
+        return;
+      }
       this.setTimetable(cls);
       this.curClasses.push(cls);
+      this.bestSol.push(cls);
     });
+    if (haserror) {
+      throw new Error("No sol");
+    }
     classes = classes.filter((cls) => {
       const lessonKey = _Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
@@ -226,11 +219,30 @@ var Solver = class _Solver {
     }
     return true;
   }
-  solve(maxsols = -1) {
-    this.maxsols = maxsols;
+  solve(input, index) {
+    const allUsersClasses = input.map(
+      (lessons) => _Solver.groupIntoClasses(lessons)
+    );
+    const coursePriority = _Solver.calculatePriority(allUsersClasses);
+    const allClasses = _Solver.assignPriority(
+      allUsersClasses[index],
+      coursePriority
+    );
+    try {
+      var { classes, numClassPerLesson } = this.preallocateMods(allClasses);
+    } catch (error) {
+      return [this.bestSol];
+    }
+    this.numClassPerLesson = numClassPerLesson;
+    this.allClasses = classes;
+    this.allClasses.sort((a, b) => {
+      return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
+    });
+    (0, import_roarr.Roarr)(Object(this.allClasses), "this.allClasses");
+    (0, import_roarr.Roarr)(this.numClassPerLesson, "this.numClassPerLesson");
     this._solve(0, Object.keys(this.numClassPerLesson).length);
     (0, import_roarr.Roarr)(Object(this.result), "this.result");
-    if (this.result.length <= 0) throw new Error(NO_SOL_ERR_MSG);
+    if (this.result.length <= 0) return [this.bestSol];
     return this.result;
   }
   _solve(counter, numlessons) {
@@ -267,12 +279,12 @@ var Solver = class _Solver {
 };
 
 // src/index.ts
-function getOptimisedTimetable(timetables, index, maxsols = -1) {
+function getOptimisedTimetable(timetables, index, maxSols = -1) {
   const processedTimetable = timetables.map((e) => {
     return preprocess(e);
   });
-  const solver = new Solver(processedTimetable, index);
-  const solvedTimetable = solver.solve(maxsols);
+  const solver = new Solver({ maxSols });
+  const solvedTimetable = solver.solve(processedTimetable, index);
   const ret = [];
   solvedTimetable.forEach((timetable) => {
     let retTimetable = [];

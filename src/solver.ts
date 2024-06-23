@@ -31,6 +31,10 @@ type Cls = {
   timeslots: TS[];
 };
 
+type Config = {
+  maxSols: number;
+};
+
 // TS for TimeSlot
 export type TS = {
   moduleCode: string;
@@ -68,42 +72,25 @@ export class Solver {
   maxsols: number;
   numsols: number;
 
-  constructor(input: any[][], index: number) {
-    const allUsersClasses: any[] = [];
-    input.forEach((lessons) => {
-      allUsersClasses.push(Solver.groupIntoClases(lessons));
-    });
+  // Give best solution
+  bestSol: Cls[];
+  maxcounter: number;
 
-    // Find "priority" of each lesson slot
-    const coursePriority = Solver.calculatePriority(allUsersClasses);
-
-    const allClasses = Solver.assignPriority(
-      allUsersClasses[index],
-      coursePriority,
-    );
-
+  constructor({ maxSols }: Config) {
     this.numsols = 0;
-    this.maxsols = -1;
+    this.maxsols = maxSols;
 
     this.curClasses = [];
     this.result = [];
 
     this.isLessonAllocated = new Map();
     this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY, Status.FREE);
-    const { classes, numClassPerLesson } = this.preallocateMods(allClasses);
-    this.numClassPerLesson = numClassPerLesson;
-    this.allClasses = classes;
-    this.allClasses.sort((a: Cls, b: Cls) => {
-      return (
-        b.priority - a.priority ||
-        b.moduleCode.localeCompare(a.moduleCode) ||
-        b.lessonType.localeCompare(a.lessonType) ||
-        b.classNo.localeCompare(a.classNo)
-      );
-    });
 
-    log(Object(this.allClasses), "this.allClasses");
-    log(this.numClassPerLesson, "this.numClassPerLesson");
+    this.bestSol = [];
+    this.maxcounter = 0;
+
+    this.allClasses = [];
+    this.numClassPerLesson = {};
   }
 
   static getLessonKey(cls: { moduleCode: string; lessonType: string }) {
@@ -144,7 +131,7 @@ export class Solver {
     return classes;
   }
 
-  static groupIntoClases(lessons: any[]) {
+  static groupIntoClasses(lessons: any[]) {
     const classToTimeSlot: { [key: string]: Cls } = {};
     lessons.forEach((l: TS) => {
       const key = Solver.getClassKey(l);
@@ -180,6 +167,7 @@ export class Solver {
 
   preallocateMods(classes: Cls[]) {
     let numClassPerLesson = Solver.getNumClassPerLesson(classes);
+    let haserror = false;
 
     classes.forEach((cls: Cls) => {
       const lessonKey = Solver.getLessonKey(cls);
@@ -188,13 +176,20 @@ export class Solver {
 
       if (numclasses > 1) return;
 
-      if (!Solver.checkAvail(this.isFree, cls.timeslots))
-        throw new Error(NO_SOL_ERR_MSG);
+      if (!Solver.checkAvail(this.isFree, cls.timeslots)) {
+        haserror = true;
+        return;
+      }
 
       this.setTimetable(cls);
 
       this.curClasses.push(cls);
+      this.bestSol.push(cls);
     });
+
+    if (haserror) {
+      throw new Error("No sol");
+    }
 
     // Remove unwanted classes
     classes = classes.filter((cls: Cls) => {
@@ -243,12 +238,43 @@ export class Solver {
     return true;
   }
 
-  solve(maxsols: number = -1) {
-    this.maxsols = maxsols;
+  solve(input: any[][], index: number) {
+    const allUsersClasses = input.map((lessons) =>
+      Solver.groupIntoClasses(lessons),
+    );
+
+    // Find "priority" of each lesson slot
+    const coursePriority = Solver.calculatePriority(allUsersClasses);
+
+    const allClasses = Solver.assignPriority(
+      allUsersClasses[index],
+      coursePriority,
+    );
+
+    // Preprocess timetable
+    try {
+      var { classes, numClassPerLesson } = this.preallocateMods(allClasses);
+    } catch (error) {
+      return [this.bestSol];
+    }
+    this.numClassPerLesson = numClassPerLesson;
+    this.allClasses = classes;
+    this.allClasses.sort((a: Cls, b: Cls) => {
+      return (
+        b.priority - a.priority ||
+        b.moduleCode.localeCompare(a.moduleCode) ||
+        b.lessonType.localeCompare(a.lessonType) ||
+        b.classNo.localeCompare(a.classNo)
+      );
+    });
+
+    log(Object(this.allClasses), "this.allClasses");
+    log(this.numClassPerLesson, "this.numClassPerLesson");
+
     this._solve(0, Object.keys(this.numClassPerLesson).length);
 
     log(Object(this.result), "this.result");
-    if (this.result.length <= 0) throw new Error(NO_SOL_ERR_MSG);
+    if (this.result.length <= 0) return [this.bestSol];
 
     return this.result;
   }

@@ -17,7 +17,7 @@ describe("Timetable Generation", () => {
   });
 
   it("test all lessons are assigned", () => {
-    const classes = Solver.groupIntoClases(TIMETABLES[INDEX]);
+    const classes = Solver.groupIntoClasses(TIMETABLES[INDEX]);
     const numClassPerLesson = Solver.getNumClassPerLesson(classes);
 
     ans.forEach((timetable) => {
