@@ -165,6 +165,9 @@ export class Solver {
     return freq;
   }
 
+  // Optimisation
+  // Preallocate the mods to prevent the need from going one level deeper in
+  // the recursion tree
   preallocateMods(classes: Cls[]) {
     let numClassPerLesson = Solver.getNumClassPerLesson(classes);
 
