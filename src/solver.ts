@@ -74,7 +74,7 @@ export class Solver {
 
   // Give best solution
   bestSol: Cls[];
-  leastnumlessons: number;
+  minLessonCount: number;
 
   constructor({ maxSols }: Config) {
     this.numsols = 0;
@@ -87,7 +87,7 @@ export class Solver {
     this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY, Status.FREE);
 
     this.bestSol = [];
-    this.leastnumlessons = 0;
+    this.minLessonCount = 0;
 
     this.allClasses = [];
     this.numClassPerLesson = {};
@@ -266,8 +266,8 @@ export class Solver {
 
   _solve(counter: number, numlessons: number): void {
     // Save "best" result
-    if (numlessons < this.leastnumlessons) {
-      this.leastnumlessons = numlessons;
+    if (numlessons < this.minLessonCount) {
+      this.minLessonCount = numlessons;
       this.bestSol = structuredClone(this.curClasses);
     }
 
