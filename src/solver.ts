@@ -74,7 +74,7 @@ export class Solver {
 
   // Give best solution
   bestSol: Cls[];
-  maxcounter: number;
+  leastnumlessons: number;
 
   constructor({ maxSols }: Config) {
     this.numsols = 0;
@@ -87,7 +87,7 @@ export class Solver {
     this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY, Status.FREE);
 
     this.bestSol = [];
-    this.maxcounter = 0;
+    this.leastnumlessons = 0;
 
     this.allClasses = [];
     this.numClassPerLesson = {};
@@ -167,7 +167,6 @@ export class Solver {
 
   preallocateMods(classes: Cls[]) {
     let numClassPerLesson = Solver.getNumClassPerLesson(classes);
-    let haserror = false;
 
     classes.forEach((cls: Cls) => {
       const lessonKey = Solver.getLessonKey(cls);
@@ -177,38 +176,27 @@ export class Solver {
       if (numclasses > 1) return;
 
       if (!Solver.checkAvail(this.isFree, cls.timeslots)) {
-        haserror = true;
         return;
       }
 
       this.setTimetable(cls);
 
       this.curClasses.push(cls);
-      this.bestSol.push(cls);
     });
 
-    if (haserror) {
-      throw new Error("No sol");
-    }
-
     // Remove unwanted classes
-    classes = classes.filter((cls: Cls) => {
+    this.allClasses = classes.filter((cls: Cls) => {
       const lessonKey = Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
       return numclasses > 1;
     });
 
     // Remove unwanted classes
-    numClassPerLesson = Object.fromEntries(
+    this.numClassPerLesson = Object.fromEntries(
       Object.entries(numClassPerLesson).filter(([_, value]) => {
         return value > 1;
       }),
     );
-
-    return {
-      numClassPerLesson,
-      classes,
-    };
   }
 
   resetTimetable(cls: Cls) {
@@ -252,13 +240,9 @@ export class Solver {
     );
 
     // Preprocess timetable
-    try {
-      var { classes, numClassPerLesson } = this.preallocateMods(allClasses);
-    } catch (error) {
-      return [this.bestSol];
-    }
-    this.numClassPerLesson = numClassPerLesson;
-    this.allClasses = classes;
+    this.preallocateMods(allClasses);
+
+    // Sort to guarantee predictability
     this.allClasses.sort((a: Cls, b: Cls) => {
       return (
         b.priority - a.priority ||
@@ -271,7 +255,8 @@ export class Solver {
     log(Object(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
 
-    this._solve(0, Object.keys(this.numClassPerLesson).length);
+    const numlessons = Object.keys(this.numClassPerLesson).length;
+    this._solve(0, numlessons);
 
     log(Object(this.result), "this.result");
     if (this.result.length <= 0) return [this.bestSol];
@@ -280,6 +265,12 @@ export class Solver {
   }
 
   _solve(counter: number, numlessons: number): void {
+    // Save "best" result
+    if (numlessons < this.leastnumlessons) {
+      this.leastnumlessons = numlessons;
+      this.bestSol = structuredClone(this.curClasses);
+    }
+
     if (this.maxsols > 0 && this.numsols >= this.maxsols) {
       return;
     }

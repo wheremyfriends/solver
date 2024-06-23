@@ -83,7 +83,7 @@ var Solver = class _Solver {
     this.isLessonAllocated = /* @__PURE__ */ new Map();
     this.isFree = init2DArr(DAYS_IN_WEEK, HOURS_IN_DAY, 0 /* FREE */);
     this.bestSol = [];
-    this.maxcounter = 0;
+    this.leastnumlessons = 0;
     this.allClasses = [];
     this.numClassPerLesson = {};
   }
@@ -142,36 +142,26 @@ var Solver = class _Solver {
   }
   preallocateMods(classes) {
     let numClassPerLesson = _Solver.getNumClassPerLesson(classes);
-    let haserror = false;
     classes.forEach((cls) => {
       const lessonKey = _Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
       if (numclasses > 1) return;
       if (!_Solver.checkAvail(this.isFree, cls.timeslots)) {
-        haserror = true;
         return;
       }
       this.setTimetable(cls);
       this.curClasses.push(cls);
-      this.bestSol.push(cls);
     });
-    if (haserror) {
-      throw new Error("No sol");
-    }
-    classes = classes.filter((cls) => {
+    this.allClasses = classes.filter((cls) => {
       const lessonKey = _Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
       return numclasses > 1;
     });
-    numClassPerLesson = Object.fromEntries(
+    this.numClassPerLesson = Object.fromEntries(
       Object.entries(numClassPerLesson).filter(([_, value]) => {
         return value > 1;
       })
     );
-    return {
-      numClassPerLesson,
-      classes
-    };
   }
   resetTimetable(cls) {
     cls.timeslots.forEach((ts) => {
@@ -205,24 +195,23 @@ var Solver = class _Solver {
       allUsersClasses[index],
       coursePriority
     );
-    try {
-      var { classes, numClassPerLesson } = this.preallocateMods(allClasses);
-    } catch (error) {
-      return [this.bestSol];
-    }
-    this.numClassPerLesson = numClassPerLesson;
-    this.allClasses = classes;
+    this.preallocateMods(allClasses);
     this.allClasses.sort((a, b) => {
       return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
     });
     log(Object(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
-    this._solve(0, Object.keys(this.numClassPerLesson).length);
+    const numlessons = Object.keys(this.numClassPerLesson).length;
+    this._solve(0, numlessons);
     log(Object(this.result), "this.result");
     if (this.result.length <= 0) return [this.bestSol];
     return this.result;
   }
   _solve(counter, numlessons) {
+    if (numlessons < this.leastnumlessons) {
+      this.leastnumlessons = numlessons;
+      this.bestSol = structuredClone(this.curClasses);
+    }
     if (this.maxsols > 0 && this.numsols >= this.maxsols) {
       return;
     }
