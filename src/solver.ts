@@ -262,6 +262,7 @@ export class Solver {
     log(this.numClassPerLesson, "this.numClassPerLesson");
 
     const numlessons = Object.keys(this.numClassPerLesson).length;
+    this.minLessonCount = numlessons;
     this._solve(0, numlessons);
 
     log(Object(this.result), "this.result");
