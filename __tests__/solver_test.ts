@@ -1,4 +1,4 @@
-import { it } from "@jest/globals";
+import { describe, beforeEach, it, expect } from "@jest/globals";
 import { timetable as user1 } from "../timetables/user1";
 import { timetable as user2 } from "../timetables/user2";
 import { timetable as user3 } from "../timetables/user3";
@@ -17,7 +17,7 @@ describe("Timetable Generation", () => {
   });
 
   it("test all lessons are assigned", () => {
-    const classes = Solver.groupIntoClases(TIMETABLES[INDEX]);
+    const classes = Solver.groupIntoClasses(TIMETABLES[INDEX]);
     const numClassPerLesson = Solver.getNumClassPerLesson(classes);
 
     ans.forEach((timetable) => {

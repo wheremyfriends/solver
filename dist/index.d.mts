@@ -8,6 +8,6 @@ type TimeSlot = {
     [key: string]: any;
 };
 
-declare function getOptimisedTimetable(timetables: TimeSlot[][], index: number, maxsols?: number): TimeSlot[][];
+declare function getOptimisedTimetable(timetables: TimeSlot[][], index: number, maxSols?: number): TimeSlot[][];
 
 export { getOptimisedTimetable };

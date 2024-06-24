@@ -31,6 +31,10 @@ type Cls = {
   timeslots: TS[];
 };
 
+type Config = {
+  maxSols: number;
+};
+
 // TS for TimeSlot
 export type TS = {
   moduleCode: string;
@@ -68,42 +72,25 @@ export class Solver {
   maxsols: number;
   numsols: number;
 
-  constructor(input: any[][], index: number) {
-    const allUsersClasses: any[] = [];
-    input.forEach((lessons) => {
-      allUsersClasses.push(Solver.groupIntoClases(lessons));
-    });
+  // Give best solution
+  bestSol: Cls[];
+  minLessonCount: number;
 
-    // Find "priority" of each lesson slot
-    const coursePriority = Solver.calculatePriority(allUsersClasses);
-
-    const allClasses = Solver.assignPriority(
-      allUsersClasses[index],
-      coursePriority,
-    );
-
+  constructor({ maxSols }: Config) {
     this.numsols = 0;
-    this.maxsols = -1;
+    this.maxsols = maxSols;
 
     this.curClasses = [];
     this.result = [];
 
     this.isLessonAllocated = new Map();
     this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY, Status.FREE);
-    const { classes, numClassPerLesson } = this.preallocateMods(allClasses);
-    this.numClassPerLesson = numClassPerLesson;
-    this.allClasses = classes;
-    this.allClasses.sort((a: Cls, b: Cls) => {
-      return (
-        b.priority - a.priority ||
-        b.moduleCode.localeCompare(a.moduleCode) ||
-        b.lessonType.localeCompare(a.lessonType) ||
-        b.classNo.localeCompare(a.classNo)
-      );
-    });
 
-    log(Object(this.allClasses), "this.allClasses");
-    log(this.numClassPerLesson, "this.numClassPerLesson");
+    this.bestSol = [];
+    this.minLessonCount = 0;
+
+    this.allClasses = [];
+    this.numClassPerLesson = {};
   }
 
   static getLessonKey(cls: { moduleCode: string; lessonType: string }) {
@@ -144,7 +131,7 @@ export class Solver {
     return classes;
   }
 
-  static groupIntoClases(lessons: any[]) {
+  static groupIntoClasses(lessons: any[]) {
     const classToTimeSlot: { [key: string]: Cls } = {};
     lessons.forEach((l: TS) => {
       const key = Solver.getClassKey(l);
@@ -178,6 +165,9 @@ export class Solver {
     return freq;
   }
 
+  // Optimisation
+  // Preallocate the mods to prevent the need from going one level deeper in
+  // the recursion tree
   preallocateMods(classes: Cls[]) {
     let numClassPerLesson = Solver.getNumClassPerLesson(classes);
 
@@ -188,32 +178,30 @@ export class Solver {
 
       if (numclasses > 1) return;
 
-      if (!Solver.checkAvail(this.isFree, cls.timeslots))
-        throw new Error(NO_SOL_ERR_MSG);
+      if (!Solver.checkAvail(this.isFree, cls.timeslots)) {
+        return;
+      }
 
       this.setTimetable(cls);
 
       this.curClasses.push(cls);
     });
 
+    this.bestSol = structuredClone(this.curClasses);
+
     // Remove unwanted classes
-    classes = classes.filter((cls: Cls) => {
+    this.allClasses = classes.filter((cls: Cls) => {
       const lessonKey = Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
       return numclasses > 1;
     });
 
     // Remove unwanted classes
-    numClassPerLesson = Object.fromEntries(
+    this.numClassPerLesson = Object.fromEntries(
       Object.entries(numClassPerLesson).filter(([_, value]) => {
         return value > 1;
       }),
     );
-
-    return {
-      numClassPerLesson,
-      classes,
-    };
   }
 
   resetTimetable(cls: Cls) {
@@ -243,17 +231,52 @@ export class Solver {
     return true;
   }
 
-  solve(maxsols: number = -1) {
-    this.maxsols = maxsols;
-    this._solve(0, Object.keys(this.numClassPerLesson).length);
+  solve(input: any[][], index: number) {
+    const allUsersClasses = input.map((lessons) =>
+      Solver.groupIntoClasses(lessons),
+    );
+
+    // Find "priority" of each lesson slot
+    const coursePriority = Solver.calculatePriority(allUsersClasses);
+
+    const allClasses = Solver.assignPriority(
+      allUsersClasses[index],
+      coursePriority,
+    );
+
+    // Preprocess timetable
+    this.preallocateMods(allClasses);
+
+    // Sort to guarantee predictability
+    this.allClasses.sort((a: Cls, b: Cls) => {
+      return (
+        b.priority - a.priority ||
+        b.moduleCode.localeCompare(a.moduleCode) ||
+        b.lessonType.localeCompare(a.lessonType) ||
+        b.classNo.localeCompare(a.classNo)
+      );
+    });
+
+    log(Object(this.curClasses), "this.curClasses");
+    log(Object(this.allClasses), "this.allClasses");
+    log(this.numClassPerLesson, "this.numClassPerLesson");
+
+    const numlessons = Object.keys(this.numClassPerLesson).length;
+    this._solve(0, numlessons);
 
     log(Object(this.result), "this.result");
-    if (this.result.length <= 0) throw new Error(NO_SOL_ERR_MSG);
+    if (this.result.length <= 0) return [this.bestSol];
 
     return this.result;
   }
 
   _solve(counter: number, numlessons: number): void {
+    // Save "best" result
+    if (numlessons < this.minLessonCount) {
+      this.minLessonCount = numlessons;
+      this.bestSol = structuredClone(this.curClasses);
+    }
+
     if (this.maxsols > 0 && this.numsols >= this.maxsols) {
       return;
     }
