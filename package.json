@@ -4,6 +4,7 @@
   "description": "",
   "scripts": {
     "build": "tsup",
+    "start": "ts-node src/run.ts",
     "test": "jest"
   },
   "keywords": [],
