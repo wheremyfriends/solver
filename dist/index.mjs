@@ -155,6 +155,7 @@ var Solver = class _Solver {
       this.setTimetable(cls);
       this.curClasses.push(cls);
     });
+    this.bestSol = structuredClone(this.curClasses);
     this.allClasses = classes.filter((cls) => {
       const lessonKey = _Solver.getLessonKey(cls);
       const numclasses = numClassPerLesson[lessonKey];
@@ -202,6 +203,7 @@ var Solver = class _Solver {
     this.allClasses.sort((a, b) => {
       return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
     });
+    log(Object(this.curClasses), "this.curClasses");
     log(Object(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
     const numlessons = Object.keys(this.numClassPerLesson).length;
