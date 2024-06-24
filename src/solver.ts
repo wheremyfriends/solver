@@ -187,6 +187,8 @@ export class Solver {
       this.curClasses.push(cls);
     });
 
+    this.bestSol = structuredClone(this.curClasses);
+
     // Remove unwanted classes
     this.allClasses = classes.filter((cls: Cls) => {
       const lessonKey = Solver.getLessonKey(cls);
@@ -255,6 +257,7 @@ export class Solver {
       );
     });
 
+    log(Object(this.curClasses), "this.curClasses");
     log(Object(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
 
