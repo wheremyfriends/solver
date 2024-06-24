@@ -106,7 +106,7 @@ var Solver = class _Solver {
     this.isLessonAllocated = /* @__PURE__ */ new Map();
     this.isFree = init2DArr(DAYS_IN_WEEK, HOURS_IN_DAY, 0 /* FREE */);
     this.bestSol = [];
-    this.leastnumlessons = 0;
+    this.minLessonCount = 0;
     this.allClasses = [];
     this.numClassPerLesson = {};
   }
@@ -163,6 +163,9 @@ var Solver = class _Solver {
     });
     return freq;
   }
+  // Optimisation
+  // Preallocate the mods to prevent the need from going one level deeper in
+  // the recursion tree
   preallocateMods(classes) {
     let numClassPerLesson = _Solver.getNumClassPerLesson(classes);
     classes.forEach((cls) => {
@@ -231,8 +234,8 @@ var Solver = class _Solver {
     return this.result;
   }
   _solve(counter, numlessons) {
-    if (numlessons < this.leastnumlessons) {
-      this.leastnumlessons = numlessons;
+    if (numlessons < this.minLessonCount) {
+      this.minLessonCount = numlessons;
       this.bestSol = structuredClone(this.curClasses);
     }
     if (this.maxsols > 0 && this.numsols >= this.maxsols) {
