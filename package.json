@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "build": "tsup",
-    "start": "ts-node src/run.ts",
+    "start": "ROARR_LOG=true ts-node src/run.ts | roarr",
     "test": "jest"
   },
   "keywords": [],
