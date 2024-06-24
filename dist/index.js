@@ -230,6 +230,7 @@ var Solver = class _Solver {
     (0, import_roarr.Roarr)(Object(this.allClasses), "this.allClasses");
     (0, import_roarr.Roarr)(this.numClassPerLesson, "this.numClassPerLesson");
     const numlessons = Object.keys(this.numClassPerLesson).length;
+    this.minLessonCount = numlessons;
     this._solve(0, numlessons);
     (0, import_roarr.Roarr)(Object(this.result), "this.result");
     if (this.result.length <= 0) return [this.bestSol];
