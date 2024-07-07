@@ -391,7 +391,7 @@ export class Solver {
       this.config.breaks,
     );
 
-    console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
+    // console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
 
     if (isAvail && !isAllocated && isClose && hasBreak) {
       Solver.setTimetable(this.isFree, curCls);
