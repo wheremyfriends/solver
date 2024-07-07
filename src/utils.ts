@@ -1,4 +1,4 @@
-import { TimeSlot, TS } from "./solver";
+import { Coord, VenueInfo, TS, NUSModsLessons } from "./types";
 
 /**
  * Converts day (e.g Monday/Tuesday/Wednesday) to its corresponding number.
@@ -45,24 +45,97 @@ export function init2DArr<T>(row: number, col: number, initval: T): T[][] {
   return output;
 }
 
-export function preprocess(timeslots: TimeSlot[]) {
+export function timeToIndex(time: number) {
+  // Each day is split into half hours
+  // 1 day has 48 half hours
+  const hours = Math.floor(time / 100);
+  const minutes = time % 100;
+
+  return hours * 2 + minutes / 30;
+}
+
+// function indexToTime(timeIndex: number) {
+//   const minuteIndex = timeIndex % 2;
+//   const hours = (timeIndex - minuteIndex) / 2;
+//   const minutes = `${minuteIndex * 30}`.padStart(2, "0");
+//
+//   return `${hours}${minutes}`.padStart(4, "0");
+// }
+
+export function preprocess(
+  timeslots: NUSModsLessons[],
+  venueInfo: VenueInfo,
+): TS[] {
   return timeslots.map((ts) => {
+    // Get coords of venue
+    const coord =
+      ts.venue in venueInfo
+        ? {
+            lat: venueInfo[ts.venue].lat,
+            lon: venueInfo[ts.venue].lon,
+          }
+        : undefined;
+
     return {
       ...ts,
-      startTime: parseInt(ts["startTime"]) / 100,
-      endTime: parseInt(ts["endTime"]) / 100,
-      day: convertDaytoNumber(ts["day"]),
+      startIndex: timeToIndex(parseInt(ts["startTime"])),
+      endIndex: timeToIndex(parseInt(ts["endTime"])),
+      dayIndex: convertDaytoNumber(ts["day"]),
+      coord: coord,
     };
   });
 }
 
 export function postprocess(timeslots: TS[]) {
   return timeslots.map((ts) => {
-    return {
-      ...ts,
-      startTime: (ts["startTime"] * 100).toString().padStart(4, "0"),
-      endTime: (ts["endTime"] * 100).toString().padStart(4, "0"),
-      day: convertNumbertoDay(ts["day"]),
-    };
+    // Remove keys added during preprocessing
+    const { startIndex, endIndex, dayIndex, coord, ...remaining } = ts;
+    return remaining;
   });
+}
+
+export function calcDist(p1: Coord, p2: Coord) {
+  const r = 6371; // km
+  const p = Math.PI / 180;
+
+  const a =
+    0.5 -
+    Math.cos((p1.lat - p2.lat) * p) / 2 +
+    (Math.cos(p1.lat * p) *
+      Math.cos(p2.lat * p) *
+      (1 - Math.cos((p2.lon - p1.lon) * p))) /
+      2;
+
+  return 2 * r * Math.asin(Math.sqrt(a)); // in KM
+}
+
+export function prettify(
+  classes: {
+    moduleCode: string;
+    lessonType: string;
+    classNo: string;
+  }[],
+) {
+  return Object(
+    classes.map((cls) => `${cls.moduleCode} ${cls.lessonType} ${cls.classNo}`),
+  );
+}
+
+export function transformVenues(venueInfo: {
+  [key: string]: {
+    location: {
+      x: number;
+      y: number;
+    };
+  };
+}): VenueInfo {
+  return Object.keys(venueInfo)
+    .filter((key) => "location" in venueInfo[key])
+    .reduce((acc, key) => {
+      acc[key] = {
+        lon: venueInfo[key].location.x,
+        lat: venueInfo[key].location.y,
+      };
+      return acc;
+    }, {} as VenueInfo);
 }

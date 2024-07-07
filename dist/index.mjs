@@ -17,6 +17,18 @@ var __spreadValues = (a, b) => {
   return a;
 };
 var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+var __objRest = (source, exclude) => {
+  var target = {};
+  for (var prop in source)
+    if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+      target[prop] = source[prop];
+  if (source != null && __getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(source)) {
+      if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+        target[prop] = source[prop];
+    }
+  return target;
+};
 
 // src/utils.ts
 function convertDaytoNumber(inp) {
@@ -31,19 +43,6 @@ function convertDaytoNumber(inp) {
   };
   return days[inp];
 }
-function convertNumbertoDay(inp) {
-  const days = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday"
-  ];
-  return days[inp];
-}
 function init2DArr(row, col, initval) {
   let output = [];
   for (let i = 0; i < row; i++) {
@@ -51,37 +50,113 @@ function init2DArr(row, col, initval) {
   }
   return output;
 }
-function preprocess(timeslots) {
+function timeToIndex(time) {
+  const hours = Math.floor(time / 100);
+  const minutes = time % 100;
+  return hours * 2 + minutes / 30;
+}
+function preprocess(timeslots, venueInfo) {
   return timeslots.map((ts) => {
+    const coord = ts.venue in venueInfo ? {
+      lat: venueInfo[ts.venue].lat,
+      lon: venueInfo[ts.venue].lon
+    } : void 0;
     return __spreadProps(__spreadValues({}, ts), {
-      startTime: parseInt(ts["startTime"]) / 100,
-      endTime: parseInt(ts["endTime"]) / 100,
-      day: convertDaytoNumber(ts["day"])
+      startIndex: timeToIndex(parseInt(ts["startTime"])),
+      endIndex: timeToIndex(parseInt(ts["endTime"])),
+      dayIndex: convertDaytoNumber(ts["day"]),
+      coord
     });
   });
 }
 function postprocess(timeslots) {
   return timeslots.map((ts) => {
-    return __spreadProps(__spreadValues({}, ts), {
-      startTime: (ts["startTime"] * 100).toString().padStart(4, "0"),
-      endTime: (ts["endTime"] * 100).toString().padStart(4, "0"),
-      day: convertNumbertoDay(ts["day"])
-    });
+    const _a = ts, { startIndex, endIndex, dayIndex, coord } = _a, remaining = __objRest(_a, ["startIndex", "endIndex", "dayIndex", "coord"]);
+    return remaining;
   });
+}
+function calcDist(p1, p2) {
+  const r = 6371;
+  const p = Math.PI / 180;
+  const a = 0.5 - Math.cos((p1.lat - p2.lat) * p) / 2 + Math.cos(p1.lat * p) * Math.cos(p2.lat * p) * (1 - Math.cos((p2.lon - p1.lon) * p)) / 2;
+  return 2 * r * Math.asin(Math.sqrt(a));
+}
+function prettify(classes) {
+  return Object(
+    classes.map((cls) => `${cls.moduleCode} ${cls.lessonType} ${cls.classNo}`)
+  );
 }
 
 // src/solver.ts
 import { Roarr as log } from "roarr";
 var HOURS_IN_DAY = 24;
 var DAYS_IN_WEEK = 7;
+var TIMESLOT_SIZE = 30;
+function doTimeslotsOverlap(ts1, ts2) {
+  if (ts1.dayIndex !== ts2.dayIndex) return false;
+  return !(ts1.endIndex <= ts2.startIndex || ts2.endIndex <= ts1.startIndex);
+}
+function isBreakPresent(isFree, cls, breaks) {
+  if ((breaks == null ? void 0 : breaks.length) <= 0) return true;
+  return breaks.every((b) => {
+    const minDuration = b.minDuration;
+    let vacuouslyTrue = true;
+    for (let breakTS of b.timeslots) {
+      const hasOverlap = cls.timeslots.some(
+        (classTS) => doTimeslotsOverlap(
+          __spreadProps(__spreadValues({}, breakTS), {
+            startIndex: breakTS.start,
+            endIndex: breakTS.end,
+            dayIndex: classTS.dayIndex
+          }),
+          classTS
+        )
+      );
+      if (!hasOverlap) continue;
+      vacuouslyTrue = false;
+      Solver.setTimetable(isFree, cls);
+      const res = cls.timeslots.every((ts) => {
+        const dayIndex = ts.dayIndex;
+        let totalbreak = 0;
+        for (let i = breakTS.start; i < breakTS.end; i++) {
+          if (isFree[dayIndex][i] !== void 0) totalbreak = 0;
+          totalbreak += TIMESLOT_SIZE;
+          if (totalbreak >= minDuration) return true;
+        }
+      });
+      Solver.resetTimetable(isFree, cls);
+      return res;
+    }
+    return vacuouslyTrue;
+  });
+}
+function isCloseEnough(isFree, cls, maxDist) {
+  if (maxDist < 0) return true;
+  return cls.timeslots.filter((cur) => cur.coord !== void 0).reduce((acc, cur) => {
+    const day = cur.dayIndex;
+    const prev = isFree[day][cur.startIndex - 1];
+    if ((prev == null ? void 0 : prev.coord) !== void 0) {
+      const dist = calcDist(prev.coord, cur.coord);
+      acc && (acc = dist <= maxDist);
+    }
+    const next = isFree[day][cur.endIndex + 1];
+    if ((next == null ? void 0 : next.coord) !== void 0) {
+      const dist = calcDist(next.coord, cur.coord);
+      acc && (acc = dist <= maxDist);
+    }
+    log(`acc: ${acc}`);
+    return acc;
+  }, true);
+}
 var Solver = class _Solver {
-  constructor({ maxSols }) {
+  constructor(config) {
     this.numsols = 0;
-    this.maxsols = maxSols;
+    this.maxsols = config.maxSols;
+    this.config = config;
     this.curClasses = [];
     this.result = [];
     this.isLessonAllocated = /* @__PURE__ */ new Map();
-    this.isFree = init2DArr(DAYS_IN_WEEK, HOURS_IN_DAY, 0 /* FREE */);
+    this.isFree = init2DArr(DAYS_IN_WEEK, HOURS_IN_DAY * 2, void 0);
     this.bestSol = [];
     this.minLessonCount = 0;
     this.allClasses = [];
@@ -124,6 +199,7 @@ var Solver = class _Solver {
           lessonType: l.lessonType,
           classNo: l.classNo,
           priority: 0,
+          coord: l.coord,
           timeslots: [l]
         };
       }
@@ -152,7 +228,7 @@ var Solver = class _Solver {
       if (!_Solver.checkAvail(this.isFree, cls.timeslots)) {
         return;
       }
-      this.setTimetable(cls);
+      _Solver.setTimetable(this.isFree, cls);
       this.curClasses.push(cls);
     });
     this.bestSol = structuredClone(this.curClasses);
@@ -167,25 +243,25 @@ var Solver = class _Solver {
       })
     );
   }
-  resetTimetable(cls) {
+  static resetTimetable(isFree, cls) {
     cls.timeslots.forEach((ts) => {
-      _Solver.setTimetableVal(this.isFree, ts, 0 /* FREE */);
+      _Solver.setTimetableVal(isFree, ts, void 0);
     });
   }
-  setTimetable(cls) {
+  static setTimetable(isFree, cls) {
     cls.timeslots.forEach((ts) => {
-      _Solver.setTimetableVal(this.isFree, ts, 1 /* ALLOCATED */);
+      _Solver.setTimetableVal(isFree, ts, cls);
     });
   }
   static setTimetableVal(bitmap, timeslot, val) {
-    for (let i = timeslot.startTime; i < timeslot.endTime; i++) {
-      bitmap[timeslot.day][i] = val;
+    for (let i = timeslot.startIndex; i < timeslot.endIndex; i++) {
+      bitmap[timeslot.dayIndex][i] = val;
     }
   }
   static checkAvail(bitmap, timeslots) {
     for (let ts of timeslots) {
-      for (let i = ts.startTime; i < ts.endTime; i++) {
-        if (bitmap[ts.day][i] == 1 /* ALLOCATED */) return false;
+      for (let i = ts.startIndex; i < ts.endIndex; i++) {
+        if (bitmap[ts.dayIndex][i] != void 0) return false;
       }
     }
     return true;
@@ -200,16 +276,29 @@ var Solver = class _Solver {
       coursePriority
     );
     this.preallocateMods(allClasses);
+    const daysRank = this.config.prefDays.reduce((acc, day, index2) => {
+      acc[day % DAYS_IN_WEEK] = index2;
+      return acc;
+    }, new Array(DAYS_IN_WEEK).fill(DAYS_IN_WEEK));
+    log(Object(daysRank), "daysRank");
     this.allClasses.sort((a, b) => {
-      return b.priority - a.priority || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
+      const aDay = a.timeslots.reduce(
+        (acc, ts) => Math.min(daysRank[ts.dayIndex], acc),
+        DAYS_IN_WEEK
+      );
+      const bDay = b.timeslots.reduce(
+        (acc, ts) => Math.min(daysRank[ts.dayIndex], acc),
+        DAYS_IN_WEEK
+      );
+      return b.priority - a.priority || aDay - bDay || b.moduleCode.localeCompare(a.moduleCode) || b.lessonType.localeCompare(a.lessonType) || b.classNo.localeCompare(a.classNo);
     });
-    log(Object(this.curClasses), "this.curClasses");
-    log(Object(this.allClasses), "this.allClasses");
+    log(prettify(this.curClasses), "this.curClasses");
+    log(prettify(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
     const numlessons = Object.keys(this.numClassPerLesson).length;
     this.minLessonCount = numlessons;
     this._solve(0, numlessons);
-    log(Object(this.result), "this.result");
+    log(Object(this.result.map((classes) => prettify(classes))), "this.result");
     if (this.result.length <= 0) return [this.bestSol];
     return this.result;
   }
@@ -223,7 +312,7 @@ var Solver = class _Solver {
     }
     if (numlessons <= 0) {
       this.numsols++;
-      log(Object(this.curClasses), "Solution");
+      log(prettify(this.curClasses), "Solution");
       const solution = structuredClone(this.curClasses);
       this.result.push(solution);
       return;
@@ -236,12 +325,22 @@ var Solver = class _Solver {
     this.numClassPerLesson[lessonKey]--;
     const isAvail = _Solver.checkAvail(this.isFree, curCls.timeslots);
     const isAllocated = !!this.isLessonAllocated.get(lessonKey);
-    if (isAvail && !isAllocated) {
-      this.setTimetable(curCls);
+    const isClose = isCloseEnough(
+      this.isFree,
+      curCls,
+      this.config.maxDist
+    );
+    const hasBreak = isBreakPresent(
+      this.isFree,
+      curCls,
+      this.config.breaks
+    );
+    if (isAvail && !isAllocated && isClose && hasBreak) {
+      _Solver.setTimetable(this.isFree, curCls);
       this.isLessonAllocated.set(lessonKey, true);
       this.curClasses.push(curCls);
       this._solve(counter + 1, numlessons - 1);
-      this.resetTimetable(curCls);
+      _Solver.resetTimetable(this.isFree, curCls);
       this.isLessonAllocated.set(lessonKey, false);
       this.curClasses.pop();
     }
@@ -251,11 +350,33 @@ var Solver = class _Solver {
 };
 
 // src/index.ts
-function getOptimisedTimetable(timetables, index, maxSols = -1) {
-  const processedTimetable = timetables.map((e) => {
-    return preprocess(e);
+var defaultConf = {
+  maxSols: -1,
+  prefDays: [],
+  breaks: [],
+  maxDist: -1,
+  venueInfo: {}
+};
+function preprocessConfig(config) {
+  return __spreadProps(__spreadValues({}, config), {
+    breaks: config.breaks.map((b) => {
+      return __spreadProps(__spreadValues({}, b), {
+        timeslots: b.timeslots.map((ts) => {
+          return {
+            start: timeToIndex(ts.start),
+            end: timeToIndex(ts.end)
+          };
+        })
+      });
+    })
   });
-  const solver = new Solver({ maxSols });
+}
+function getOptimisedTimetable(timetables, index, config = defaultConf) {
+  const processedTimetable = timetables.map((e) => {
+    return preprocess(e, config.venueInfo);
+  });
+  config = preprocessConfig(config);
+  const solver = new Solver(config);
   const solvedTimetable = solver.solve(processedTimetable, index);
   const ret = [];
   solvedTimetable.forEach((timetable) => {

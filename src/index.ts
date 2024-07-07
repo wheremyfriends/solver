@@ -1,21 +1,49 @@
-import { TimeSlot, TS, Solver } from "./solver";
-import { preprocess, postprocess } from "./utils";
+import { Solver } from "./solver";
+import { Config, NUSModsLessons, TS } from "./types";
+import { preprocess, postprocess, timeToIndex } from "./utils";
+
+const defaultConf = {
+  maxSols: -1,
+  prefDays: [],
+  breaks: [],
+  maxDist: -1,
+  venueInfo: {},
+};
+
+function preprocessConfig(config: Config) {
+  return {
+    ...config,
+    breaks: config.breaks.map((b) => {
+      return {
+        ...b,
+        timeslots: b.timeslots.map((ts) => {
+          return {
+            start: timeToIndex(ts.start),
+            end: timeToIndex(ts.end),
+          };
+        }),
+      };
+    }),
+  };
+}
 
 export function getOptimisedTimetable(
-  timetables: TimeSlot[][],
+  timetables: NUSModsLessons[][],
   index: number,
-  maxSols: number = -1,
+  config: Config = defaultConf,
 ) {
   const processedTimetable: TS[][] = timetables.map((e) => {
-    return preprocess(e);
+    return preprocess(e, config.venueInfo);
   });
 
-  const solver = new Solver({ maxSols });
+  config = preprocessConfig(config);
+
+  const solver = new Solver(config);
   const solvedTimetable = solver.solve(processedTimetable, index);
 
-  const ret: TimeSlot[][] = [];
+  const ret: NUSModsLessons[][] = [];
   solvedTimetable.forEach((timetable) => {
-    let retTimetable: TimeSlot[] = [];
+    let retTimetable: any[] = [];
     timetable.forEach((cls) => {
       retTimetable = retTimetable.concat(postprocess(cls.timeslots));
     });

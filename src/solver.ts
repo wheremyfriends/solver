@@ -1,4 +1,5 @@
-import { init2DArr } from "./utils";
+import { Break, Cls, Config, Status, TS } from "./types";
+import { init2DArr, calcDist, prettify } from "./utils";
 import { Roarr as log } from "roarr";
 
 // Terminologies
@@ -6,59 +7,103 @@ import { Roarr as log } from "roarr";
 
 const HOURS_IN_DAY = 24;
 const DAYS_IN_WEEK = 7;
-const NO_SOL_ERR_MSG = "No Solution";
+const TIMESLOT_SIZE = 30; // minutes
 
-enum Status {
-  FREE,
-  ALLOCATED,
+type SimpleTime = {
+  dayIndex: number;
+  startIndex: number;
+  endIndex: number;
+};
+export function doTimeslotsOverlap(ts1: SimpleTime, ts2: SimpleTime) {
+  // If not on the same day, false for sure
+  if (ts1.dayIndex !== ts2.dayIndex) return false;
+
+  // Returns true if class overlaps timeslot
+  return !(ts1.endIndex <= ts2.startIndex || ts2.endIndex <= ts1.startIndex);
 }
 
-enum Day {
-  SUNDAY,
-  MONDAY,
-  TUESDAY,
-  WEDNESDAY,
-  THURSDAY,
-  FRIDAY,
-  SATURDAY,
+// Check whether the included mod is the cause of the lack of break
+export function isBreakPresent(isFree: Status[][], cls: Cls, breaks: Break[]) {
+  if (breaks?.length <= 0) return true;
+
+  // Every break needs to be true
+  return breaks.every((b) => {
+    // For each break, there needs at least minDuration consecutive hours
+    const minDuration = b.minDuration;
+    let vacuouslyTrue = true;
+    for (let breakTS of b.timeslots) {
+      const hasOverlap = cls.timeslots.some((classTS) =>
+        doTimeslotsOverlap(
+          {
+            ...breakTS,
+            startIndex: breakTS.start,
+            endIndex: breakTS.end,
+            dayIndex: classTS.dayIndex,
+          },
+          classTS,
+        ),
+      );
+
+      // If the newly inserted timeslot doesn't clash with the breaktime,
+      // then it shouldn't affect
+      if (!hasOverlap) continue;
+      vacuouslyTrue = false;
+
+      Solver.setTimetable(isFree, cls);
+      const res = cls.timeslots.every((ts) => {
+        const dayIndex = ts.dayIndex;
+
+        let totalbreak = 0;
+        for (let i = breakTS.start; i < breakTS.end; i++) {
+          if (isFree[dayIndex][i] !== undefined) totalbreak = 0;
+
+          totalbreak += TIMESLOT_SIZE;
+          if (totalbreak >= minDuration) return true;
+        }
+      });
+      Solver.resetTimetable(isFree, cls);
+
+      return res;
+    }
+
+    return vacuouslyTrue;
+  });
 }
 
-type Cls = {
-  moduleCode: string;
-  lessonType: string;
-  classNo: string;
-  priority: number;
-  timeslots: TS[];
-};
+function isCloseEnough(isFree: Status[][], cls: Cls, maxDist: number) {
+  if (maxDist < 0) return true;
 
-type Config = {
-  maxSols: number;
-};
+  return (
+    cls.timeslots
+      .filter((cur) => cur.coord !== undefined)
+      // TODO: Change to use every
+      .reduce((acc, cur) => {
+        const day = cur.dayIndex;
 
-// TS for TimeSlot
-export type TS = {
-  moduleCode: string;
-  lessonType: string;
-  classNo: string;
-  startTime: number;
-  endTime: number;
-  day: Day;
-  [key: string]: any;
-};
+        // Previous
+        // TODO: This might not be -1 given that each block is half hour now
+        const prev = isFree[day][cur.startIndex - 1];
+        if (prev?.coord !== undefined) {
+          const dist = calcDist(prev.coord, cur.coord!);
+          acc &&= dist <= maxDist;
+        }
 
-export type TimeSlot = {
-  moduleCode: string;
-  lessonType: string;
-  classNo: string;
-  startTime: string;
-  endTime: string;
-  day: string;
-  [key: string]: any;
-};
+        // Previous
+        const next = isFree[day][cur.endIndex + 1];
+        if (next?.coord !== undefined) {
+          const dist = calcDist(next.coord, cur.coord!);
+          acc &&= dist <= maxDist;
+        }
+
+        log(`acc: ${acc}`);
+        return acc;
+      }, true)
+  );
+}
 
 export class Solver {
   // Keep track of allocation status
-  isFree: Status[][];
+  isFree: Status[][]; // NOTE: One array item represents half hour, instead of one hour, there are 48 half hours a day
   isLessonAllocated: Map<string, boolean>;
 
   allClasses: Cls[]; // All classes to consider
@@ -76,15 +121,18 @@ export class Solver {
   bestSol: Cls[];
   minLessonCount: number;
 
-  constructor({ maxSols }: Config) {
+  config: Config;
+
+  constructor(config: Config) {
     this.numsols = 0;
-    this.maxsols = maxSols;
+    this.maxsols = config.maxSols;
+    this.config = config;
 
     this.curClasses = [];
     this.result = [];
 
     this.isLessonAllocated = new Map();
-    this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY, Status.FREE);
+    this.isFree = init2DArr<Status>(DAYS_IN_WEEK, HOURS_IN_DAY * 2, undefined);
 
     this.bestSol = [];
     this.minLessonCount = 0;
@@ -131,7 +179,7 @@ export class Solver {
     return classes;
   }
 
-  static groupIntoClasses(lessons: any[]) {
+  static groupIntoClasses(lessons: TS[]) {
     const classToTimeSlot: { [key: string]: Cls } = {};
     lessons.forEach((l: TS) => {
       const key = Solver.getClassKey(l);
@@ -144,6 +192,7 @@ export class Solver {
           lessonType: l.lessonType,
           classNo: l.classNo,
           priority: 0,
+          coord: l.coord,
           timeslots: [l],
         };
       }
@@ -182,7 +231,7 @@ export class Solver {
         return;
       }
 
-      this.setTimetable(cls);
+      Solver.setTimetable(this.isFree, cls);
 
       this.curClasses.push(cls);
     });
@@ -204,34 +253,38 @@ export class Solver {
     );
   }
 
-  resetTimetable(cls: Cls) {
+  static resetTimetable(isFree: Status[][], cls: Cls) {
     cls.timeslots.forEach((ts: TS) => {
-      Solver.setTimetableVal(this.isFree, ts, Status.FREE);
+      Solver.setTimetableVal(isFree, ts, undefined);
     });
   }
 
-  setTimetable(cls: Cls) {
+  static setTimetable(isFree: Status[][], cls: Cls) {
     cls.timeslots.forEach((ts: TS) => {
-      Solver.setTimetableVal(this.isFree, ts, Status.ALLOCATED);
+      Solver.setTimetableVal(isFree, ts, cls);
     });
   }
 
-  static setTimetableVal(bitmap: Status[][], timeslot: TS, val: Status) {
-    for (let i = timeslot.startTime; i < timeslot.endTime; i++) {
-      bitmap[timeslot.day][i] = val;
+  static setTimetableVal(
+    bitmap: Status[][],
+    timeslot: TS,
+    val: Cls | undefined,
+  ) {
+    for (let i = timeslot.startIndex; i < timeslot.endIndex; i++) {
+      bitmap[timeslot.dayIndex][i] = val;
     }
   }
 
   static checkAvail(bitmap: Status[][], timeslots: TS[]) {
     for (let ts of timeslots) {
-      for (let i = ts.startTime; i < ts.endTime; i++) {
-        if (bitmap[ts.day][i] == Status.ALLOCATED) return false;
+      for (let i = ts.startIndex; i < ts.endIndex; i++) {
+        if (bitmap[ts.dayIndex][i] != undefined) return false;
       }
     }
     return true;
   }
 
-  solve(input: any[][], index: number) {
+  solve(input: TS[][], index: number) {
     const allUsersClasses = input.map((lessons) =>
       Solver.groupIntoClasses(lessons),
     );
@@ -247,25 +300,44 @@ export class Solver {
     // Preprocess timetable
     this.preallocateMods(allClasses);
 
+    // Days preference
+    // Map day to its "rank"
+    const daysRank = this.config.prefDays.reduce((acc, day, index) => {
+      acc[day % DAYS_IN_WEEK] = index; // Sunday is both 7 and 0
+      return acc;
+    }, new Array(DAYS_IN_WEEK).fill(DAYS_IN_WEEK));
+
+    log(Object(daysRank), "daysRank");
+
     // Sort to guarantee predictability
     this.allClasses.sort((a: Cls, b: Cls) => {
+      const aDay = a.timeslots.reduce(
+        (acc, ts) => Math.min(daysRank[ts.dayIndex], acc),
+        DAYS_IN_WEEK,
+      );
+      const bDay = b.timeslots.reduce(
+        (acc, ts) => Math.min(daysRank[ts.dayIndex], acc),
+        DAYS_IN_WEEK,
+      );
+
       return (
         b.priority - a.priority ||
+        aDay - bDay ||
         b.moduleCode.localeCompare(a.moduleCode) ||
         b.lessonType.localeCompare(a.lessonType) ||
         b.classNo.localeCompare(a.classNo)
       );
     });
 
-    log(Object(this.curClasses), "this.curClasses");
-    log(Object(this.allClasses), "this.allClasses");
+    log(prettify(this.curClasses), "this.curClasses");
+    log(prettify(this.allClasses), "this.allClasses");
     log(this.numClassPerLesson, "this.numClassPerLesson");
 
     const numlessons = Object.keys(this.numClassPerLesson).length;
     this.minLessonCount = numlessons;
     this._solve(0, numlessons);
 
-    log(Object(this.result), "this.result");
+    log(Object(this.result.map((classes) => prettify(classes))), "this.result");
     if (this.result.length <= 0) return [this.bestSol];
 
     return this.result;
@@ -286,7 +358,7 @@ export class Solver {
       this.numsols++;
 
       // Save solution
-      log(Object(this.curClasses), "Solution");
+      log(prettify(this.curClasses), "Solution");
       // Deep Copy for minimal confusion
       const solution = structuredClone(this.curClasses);
       // const solution = this.curClasses;
@@ -308,15 +380,27 @@ export class Solver {
     // Choice 1: Pick
     const isAvail = Solver.checkAvail(this.isFree, curCls.timeslots);
     const isAllocated: boolean = !!this.isLessonAllocated.get(lessonKey);
+    const isClose: boolean = isCloseEnough(
+      this.isFree,
+      curCls,
+      this.config.maxDist,
+    );
+    const hasBreak: boolean = isBreakPresent(
+      this.isFree,
+      curCls,
+      this.config.breaks,
+    );
 
-    if (isAvail && !isAllocated) {
-      this.setTimetable(curCls);
+    // console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
+
+    if (isAvail && !isAllocated && isClose && hasBreak) {
+      Solver.setTimetable(this.isFree, curCls);
       this.isLessonAllocated.set(lessonKey, true);
       this.curClasses.push(curCls);
 
       this._solve(counter + 1, numlessons - 1);
 
-      this.resetTimetable(curCls);
+      Solver.resetTimetable(this.isFree, curCls);
       this.isLessonAllocated.set(lessonKey, false);
       this.curClasses.pop();
     }

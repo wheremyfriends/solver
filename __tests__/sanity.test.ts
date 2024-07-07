@@ -3,21 +3,31 @@ import { timetable as user1 } from "../timetables/user1";
 import { timetable as user2 } from "../timetables/user2";
 import { timetable as user3 } from "../timetables/user3";
 import { getOptimisedTimetable } from "../src/index";
-import { Solver, TimeSlot } from "../src/solver";
+import { Solver } from "../src/solver";
 import { init2DArr, preprocess } from "../src/utils";
+import { venueInfo } from "../venues";
+import { Cls, NUSModsLessons } from "../src/types";
 
 describe("Timetable Generation", () => {
-  let ans: TimeSlot[][];
-  const NUMSOLS = 1;
+  let ans: NUSModsLessons[][];
+  const CONFIG = {
+    maxSols: 1,
+    maxDist: -1,
+    prefDays: [],
+    breaks: [],
+    venueInfo,
+  };
   const INDEX = 0;
   const TIMETABLES = [user1, user2, user3];
 
   beforeEach(() => {
-    ans = getOptimisedTimetable(TIMETABLES, INDEX, NUMSOLS);
+    ans = getOptimisedTimetable(TIMETABLES, INDEX, CONFIG);
   });
 
   it("test all lessons are assigned", () => {
-    const classes = Solver.groupIntoClasses(TIMETABLES[INDEX]);
+    const classes = Solver.groupIntoClasses(
+      preprocess(TIMETABLES[INDEX], CONFIG.venueInfo),
+    );
     const numClassPerLesson = Solver.getNumClassPerLesson(classes);
 
     ans.forEach((timetable) => {
@@ -47,12 +57,12 @@ describe("Timetable Generation", () => {
 
   it("test timeslots have no overlap", () => {
     ans.forEach((timetable) => {
-      const bitmap = init2DArr<number>(7, 24, 0);
+      const bitmap = init2DArr<Cls | undefined>(7, 24, undefined);
 
-      const processedTimetable = preprocess(timetable);
+      const processedTimetable = preprocess(timetable, CONFIG.venueInfo);
       processedTimetable.forEach((timeslot: any) => {
         expect(Solver.checkAvail(bitmap, [timeslot])).toBeTruthy();
-        Solver.setTimetableVal(bitmap, timeslot, 1);
+        Solver.setTimetableVal(bitmap, timeslot, timeslot);
       });
     });
   });
@@ -73,6 +83,6 @@ describe("Timetable Generation", () => {
   });
 
   it("test number of solutions", () => {
-    expect(ans).toHaveLength(NUMSOLS);
+    expect(ans).toHaveLength(CONFIG.maxSols);
   });
 });
