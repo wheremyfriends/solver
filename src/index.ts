@@ -1,6 +1,6 @@
 import { Solver } from "./solver";
 import { Config, NUSModsLessons, TS } from "./types";
-import { preprocess, postprocess, timeToIndex } from "./utils";
+import { preprocess, postprocess, timeToIndex, prettify } from "./utils";
 
 const defaultConf = {
   maxSols: -1,
@@ -51,5 +51,6 @@ export function getOptimisedTimetable(
     ret.push(retTimetable);
   });
 
+  console.log(ret.map((classes) => prettify(classes)));
   return ret;
 }

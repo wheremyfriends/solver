@@ -1,4 +1,4 @@
-import { Coord, VenueInfo, TS, NUSModsLessons } from "./types";
+import { Coord, VenueInfo, TS, NUSModsLessons, Status } from "./types";
 
 /**
  * Converts day (e.g Monday/Tuesday/Wednesday) to its corresponding number.
@@ -43,6 +43,10 @@ export function init2DArr<T>(row: number, col: number, initval: T): T[][] {
   }
 
   return output;
+}
+
+export function getEmptyTimetable(): Status[][] {
+  return init2DArr<Status>(7, 48, undefined);
 }
 
 export function timeToIndex(time: number) {
