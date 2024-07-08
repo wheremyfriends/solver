@@ -5,7 +5,7 @@ import { timetable as user3 } from "../timetables/user3";
 import { getOptimisedTimetable } from "../src/index";
 import { Solver } from "../src/solver";
 import { init2DArr, preprocess } from "../src/utils";
-import { venueInfo } from "../venues";
+import { venueInfo } from "../__mocks__/venues";
 import { Cls, NUSModsLessons } from "../src/types";
 
 describe("Timetable Generation", () => {

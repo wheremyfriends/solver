@@ -26,48 +26,58 @@ export function doTimeslotsOverlap(ts1: SimpleTime, ts2: SimpleTime) {
 export function isBreakPresent(isFree: Status[][], cls: Cls, breaks: Break[]) {
   if (breaks?.length <= 0) return true;
 
+  Solver.setTimetable(isFree, cls);
+
   // Every break needs to be true
-  return breaks.every((b) => {
+  const res = breaks.every((b) => {
     // For each break, there needs at least minDuration consecutive hours
     const minDuration = b.minDuration;
-    let vacuouslyTrue = true;
-    for (let breakTS of b.timeslots) {
-      const hasOverlap = cls.timeslots.some((classTS) =>
-        doTimeslotsOverlap(
-          {
-            ...breakTS,
-            startIndex: breakTS.start,
-            endIndex: breakTS.end,
-            dayIndex: classTS.dayIndex,
-          },
-          classTS,
-        ),
-      );
 
-      // If the newly inserted timeslot doesn't clash with the breaktime,
-      // then it shouldn't affect
-      if (!hasOverlap) continue;
-      vacuouslyTrue = false;
+    // Check whether it's trivially true
+    const overlap = cls.timeslots.some((ts) => {
+      return b.timeslots.some((breakTS) => {
+        console.log({ ts, breakTS });
+        return doTimeslotsOverlap(ts, {
+          startIndex: breakTS.start,
+          endIndex: breakTS.end,
+          dayIndex: ts.dayIndex,
+        });
+      });
+    });
 
-      Solver.setTimetable(isFree, cls);
-      const res = cls.timeslots.every((ts) => {
-        const dayIndex = ts.dayIndex;
+    if (!overlap) {
+      return true;
+    }
 
+    // If either is true its ok
+    return b.timeslots.some((breakTS) => {
+      const res = Array.from(
+        cls.timeslots.reduce((acc, cur) => {
+          acc.add(cur.dayIndex);
+          return acc;
+        }, new Set<number>()),
+      ).every((dayIndex) => {
         let totalbreak = 0;
         for (let i = breakTS.start; i < breakTS.end; i++) {
-          if (isFree[dayIndex][i] !== undefined) totalbreak = 0;
+          if (isFree[dayIndex][i] !== undefined) {
+            totalbreak = 0;
+            continue;
+          }
 
           totalbreak += TIMESLOT_SIZE;
           if (totalbreak >= minDuration) return true;
         }
+
+        return false;
       });
-      Solver.resetTimetable(isFree, cls);
 
+      console.log({ breakTS, res });
       return res;
-    }
-
-    return vacuouslyTrue;
+    });
   });
+
+  Solver.resetTimetable(isFree, cls);
+  return res;
 }
 
 function isCloseEnough(isFree: Status[][], cls: Cls, maxDist: number) {
@@ -271,7 +281,13 @@ export class Solver {
     val: Cls | undefined,
   ) {
     for (let i = timeslot.startIndex; i < timeslot.endIndex; i++) {
-      bitmap[timeslot.dayIndex][i] = val;
+      const curVal = bitmap[timeslot.dayIndex][i];
+      if (
+        curVal === undefined ||
+        this.getClassKey(curVal) === this.getClassKey(timeslot)
+      ) {
+        bitmap[timeslot.dayIndex][i] = val;
+      }
     }
   }
 
@@ -331,6 +347,7 @@ export class Solver {
 
     log(prettify(this.curClasses), "this.curClasses");
     log(prettify(this.allClasses), "this.allClasses");
+    console.log({ allClasses: prettify(this.allClasses) });
     log(this.numClassPerLesson, "this.numClassPerLesson");
 
     const numlessons = Object.keys(this.numClassPerLesson).length;
@@ -391,7 +408,9 @@ export class Solver {
       this.config.breaks,
     );
 
-    // console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
+    if (isAvail && !isAllocated && (!isClose || !hasBreak)) {
+      console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
+    }
 
     if (isAvail && !isAllocated && isClose && hasBreak) {
       Solver.setTimetable(this.isFree, curCls);

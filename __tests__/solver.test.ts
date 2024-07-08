@@ -1,8 +1,9 @@
 // Unit tests for solver functionalities
 import { describe, beforeEach, it, expect } from "@jest/globals";
-import { doTimeslotsOverlap, isBreakPresent } from "../src/solver";
-import { init2DArr } from "../src/utils";
+import { doTimeslotsOverlap, isBreakPresent, Solver } from "../src/solver";
+import { getEmptyTimetable, init2DArr } from "../src/utils";
 import { Cls } from "../src/types";
+import { modules } from "../__mocks__/modules";
 
 it.each([
   [
@@ -69,140 +70,93 @@ it.each([
   expect(doTimeslotsOverlap(ts1, ts2)).toStrictEqual(expectedRes);
 });
 
-it.each([
-  {
-    isFree: init2DArr(7, 48, undefined),
-    cls: {
+const CS2040S = {
+  moduleCode: "CS2040S",
+  lessonType: "Lecture",
+  classNo: "1",
+  coord: undefined,
+  priority: 1,
+  timeslots: [
+    {
       moduleCode: "CS2040S",
       lessonType: "Lecture",
       classNo: "1",
+      startIndex: 24,
+      endIndex: 26,
+      dayIndex: 1,
       coord: undefined,
-      priority: 1,
+    },
+  ],
+};
+
+// it.each()("test hasBreak function", ({ isFree, cls, breaks, expected }) => {
+//   const res = isBreakPresent(isFree, cls, breaks);
+//   expect(res).toStrictEqual(expected);
+// });
+
+it("test if other mods will interfere (same day, same timeslot)", () => {
+  const isFree = getEmptyTimetable();
+  const breaks = [
+    {
+      minDuration: 60,
       timeslots: [
         {
-          moduleCode: "CS2040S",
-          lessonType: "Lecture",
-          classNo: "1",
-          startIndex: 24,
-          endIndex: 26,
-          dayIndex: 1,
-          coord: undefined,
+          start: 24, // 1200
+          end: 26, // 1300
         },
       ],
     },
-    breaks: [
-      {
-        minDuration: 60,
-        timeslots: [
-          {
-            start: 24,
-            end: 26,
-          },
-        ],
-      },
-    ],
-    expected: false,
-  },
-  {
-    isFree: init2DArr(7, 48, undefined),
-    cls: {
-      moduleCode: "CS2040S",
-      lessonType: "Lecture",
-      classNo: "1",
-      coord: undefined,
-      priority: 1,
+  ];
+
+  Solver.setTimetable(isFree, modules.CS2040S);
+
+  const CS2100 = modules.CS2100;
+
+  expect(isBreakPresent(isFree, CS2100, breaks)).toStrictEqual(true);
+});
+
+it("test disjointed breaks success", () => {
+  const isFree = getEmptyTimetable();
+  const breaks = [
+    {
+      minDuration: 60,
       timeslots: [
         {
-          moduleCode: "CS2040S",
-          lessonType: "Lecture",
-          classNo: "1",
-          startIndex: 25,
-          endIndex: 26,
-          dayIndex: 1,
-          coord: undefined,
+          start: 22, // 1100
+          end: 24, // 1200
+        },
+        {
+          start: 24, // 1200
+          end: 28, // 1400
         },
       ],
     },
-    breaks: [
-      {
-        minDuration: 60,
-        timeslots: [
-          {
-            start: 24,
-            end: 26,
-          },
-        ],
-      },
-    ],
-    expected: false,
-  },
-  {
-    isFree: init2DArr(7, 48, undefined),
-    cls: {
-      moduleCode: "CS2040S",
-      lessonType: "Lecture",
-      classNo: "1",
-      coord: undefined,
-      priority: 1,
+  ];
+
+  Solver.setTimetable(isFree, modules.CS2040S);
+
+  expect(isBreakPresent(isFree, modules.CS2100, breaks)).toStrictEqual(true);
+});
+
+it("test disjointed breaks #2", () => {
+  const isFree = getEmptyTimetable();
+  const breaks = [
+    {
+      minDuration: 60,
       timeslots: [
         {
-          moduleCode: "CS2040S",
-          lessonType: "Lecture",
-          classNo: "1",
-          startIndex: 24,
-          endIndex: 26,
-          dayIndex: 1,
-          coord: undefined,
+          start: 22, // 1100
+          end: 24, // 1200
+        },
+        {
+          start: 24, // 1200
+          end: 26, // 1300
         },
       ],
     },
-    breaks: [
-      {
-        minDuration: 30,
-        timeslots: [
-          {
-            start: 24,
-            end: 26,
-          },
-        ],
-      },
-    ],
-    expected: true,
-  },
-  {
-    isFree: init2DArr(7, 48, undefined),
-    cls: {
-      moduleCode: "CS2040S",
-      lessonType: "Lecture",
-      classNo: "1",
-      coord: undefined,
-      priority: 1,
-      timeslots: [
-        {
-          moduleCode: "CS2040S",
-          lessonType: "Lecture",
-          classNo: "1",
-          startIndex: 26,
-          endIndex: 28,
-          dayIndex: 1,
-          coord: undefined,
-        },
-      ],
-    },
-    breaks: [
-      {
-        minDuration: 60,
-        timeslots: [
-          {
-            start: 24,
-            end: 26,
-          },
-        ],
-      },
-    ],
-    expected: true,
-  },
-])("test hasBreak function", ({ isFree, cls, breaks, expected }) => {
-  const res = isBreakPresent(isFree, cls, breaks);
-  expect(res).toStrictEqual(expected);
+  ];
+
+  Solver.setTimetable(isFree, modules.CS2040S);
+
+  expect(isBreakPresent(isFree, modules.CS2100, breaks)).toStrictEqual(false);
 });
