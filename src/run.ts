@@ -1,7 +1,7 @@
 import { getOptimisedTimetable } from "./index";
 import { timetable } from "../timetables/input";
 import { Roarr as log } from "roarr";
-import { venueInfo } from "../venues";
+import { venueInfo } from "../__mocks__/venues";
 import { prettify } from "./utils";
 
 const INDEX = 0;

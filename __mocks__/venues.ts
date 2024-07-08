@@ -1,4 +1,4 @@
-import { Coord } from "./src/types";
+import { Coord } from "../src/types";
 
 export const venueInfo: { [key: string]: Coord } = {
   LT17: {
