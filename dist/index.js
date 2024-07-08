@@ -121,37 +121,46 @@ function doTimeslotsOverlap(ts1, ts2) {
 }
 function isBreakPresent(isFree, cls, breaks) {
   if ((breaks == null ? void 0 : breaks.length) <= 0) return true;
-  return breaks.every((b) => {
+  Solver.setTimetable(isFree, cls);
+  const res = breaks.every((b) => {
     const minDuration = b.minDuration;
-    let vacuouslyTrue = true;
-    for (let breakTS of b.timeslots) {
-      const hasOverlap = cls.timeslots.some(
-        (classTS) => doTimeslotsOverlap(
-          __spreadProps(__spreadValues({}, breakTS), {
-            startIndex: breakTS.start,
-            endIndex: breakTS.end,
-            dayIndex: classTS.dayIndex
-          }),
-          classTS
-        )
-      );
-      if (!hasOverlap) continue;
-      vacuouslyTrue = false;
-      Solver.setTimetable(isFree, cls);
-      const res = cls.timeslots.every((ts) => {
-        const dayIndex = ts.dayIndex;
+    const overlap = cls.timeslots.some((ts) => {
+      return b.timeslots.some((breakTS) => {
+        console.log({ ts, breakTS });
+        return doTimeslotsOverlap(ts, {
+          startIndex: breakTS.start,
+          endIndex: breakTS.end,
+          dayIndex: ts.dayIndex
+        });
+      });
+    });
+    if (!overlap) {
+      return true;
+    }
+    return b.timeslots.some((breakTS) => {
+      const res2 = Array.from(
+        cls.timeslots.reduce((acc, cur) => {
+          acc.add(cur.dayIndex);
+          return acc;
+        }, /* @__PURE__ */ new Set())
+      ).every((dayIndex) => {
         let totalbreak = 0;
         for (let i = breakTS.start; i < breakTS.end; i++) {
-          if (isFree[dayIndex][i] !== void 0) totalbreak = 0;
+          if (isFree[dayIndex][i] !== void 0) {
+            totalbreak = 0;
+            continue;
+          }
           totalbreak += TIMESLOT_SIZE;
           if (totalbreak >= minDuration) return true;
         }
+        return false;
       });
-      Solver.resetTimetable(isFree, cls);
-      return res;
-    }
-    return vacuouslyTrue;
+      console.log({ breakTS, res: res2 });
+      return res2;
+    });
   });
+  Solver.resetTimetable(isFree, cls);
+  return res;
 }
 function isCloseEnough(isFree, cls, maxDist) {
   if (maxDist < 0) return true;
@@ -278,7 +287,10 @@ var Solver = class _Solver {
   }
   static setTimetableVal(bitmap, timeslot, val) {
     for (let i = timeslot.startIndex; i < timeslot.endIndex; i++) {
-      bitmap[timeslot.dayIndex][i] = val;
+      const curVal = bitmap[timeslot.dayIndex][i];
+      if (curVal === void 0 || this.getClassKey(curVal) === this.getClassKey(timeslot)) {
+        bitmap[timeslot.dayIndex][i] = val;
+      }
     }
   }
   static checkAvail(bitmap, timeslots) {
@@ -317,6 +329,7 @@ var Solver = class _Solver {
     });
     (0, import_roarr.Roarr)(prettify(this.curClasses), "this.curClasses");
     (0, import_roarr.Roarr)(prettify(this.allClasses), "this.allClasses");
+    console.log({ allClasses: prettify(this.allClasses) });
     (0, import_roarr.Roarr)(this.numClassPerLesson, "this.numClassPerLesson");
     const numlessons = Object.keys(this.numClassPerLesson).length;
     this.minLessonCount = numlessons;
@@ -358,6 +371,9 @@ var Solver = class _Solver {
       curCls,
       this.config.breaks
     );
+    if (isAvail && !isAllocated && (!isClose || !hasBreak)) {
+      console.log({ curCls, isAvail, isAllocated, isClose, hasBreak });
+    }
     if (isAvail && !isAllocated && isClose && hasBreak) {
       _Solver.setTimetable(this.isFree, curCls);
       this.isLessonAllocated.set(lessonKey, true);
@@ -409,6 +425,7 @@ function getOptimisedTimetable(timetables, index, config = defaultConf) {
     });
     ret.push(retTimetable);
   });
+  console.log(ret.map((classes) => prettify(classes)));
   return ret;
 }
 // Annotate the CommonJS export names for ESM import in node:
